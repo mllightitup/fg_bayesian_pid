@@ -29,7 +29,7 @@ def ctrls_callback(ctrls_data, event_pipe):
         child_rudder_state = child_rudder_req
         child_elevator_state = child_elevator_req
 
-    ctrls_data.aileron = child_aileron_state  # from -1..1
+    ctrls_data.aileron = child_aileron_state
     ctrls_data.rudder = child_rudder_state
     ctrls_data.elevator = child_elevator_state
     return ctrls_data
@@ -63,10 +63,10 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     fdm_event_pipe.parent_send((start_new,))
     time.sleep(1)
     # Создаем экземпляры классов
-    aircraft_controller = AircraftController(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_kp, elevator_ki, elevator_kd)
+    aircraft_controller = AircraftController(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_kp,
+                                             elevator_ki, elevator_kd)
 
     target_altitude = random.randint(2000, 4000)
-
 
     # DATA COLLECTION INIT
     altitude_error_list = []
@@ -104,7 +104,8 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
             parent_rudder_req = max(min(head_error * head_Kp, 0.3), -0.3)
 
             # AIRCRAFT CONTROLLER
-            parent_elevator_req = aircraft_controller.update(target_altitude, parent_alt_ft, parent_climb_rate_ft_per_s, parent_elevator)
+            parent_elevator_req = aircraft_controller.update(target_altitude, parent_alt_ft, parent_climb_rate_ft_per_s,
+                                                             parent_elevator)
 
             # SENDING SIGNALS TO ctrls_callback
             ctrls_event_pipe.parent_send((parent_aileron_req, parent_rudder_req, parent_elevator_req))
@@ -113,7 +114,7 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
             altitude_list.append(parent_alt_ft)
             roc_list.append(parent_climb_rate_ft_per_s)
             elevator_deflection_list.append(parent_elevator_req)
-            target_roc_list.append(aircraft_controller.target_roc) #FIXME
+            target_roc_list.append(aircraft_controller.target_roc)
             # METRICS COLLECTION
             altitude_error = parent_alt_m - target_altitude
             altitude_error_list.append(altitude_error)
@@ -129,11 +130,12 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     l1_altitude_error = np.sum(np.abs(np.array(altitude_error_list) / coefficient))
     l1_vertical_speed_dif = np.sum(np.abs(np.array(vertical_speed_dif_list) / np.sqrt(coefficient)))
 
-    # SAVE LOGS FIXME REWORK LOGS
+    # SAVE LOGS
     filename = f"data/{n}-Start={start_altitude_ft}-Target={target_altitude}-L1_AE={round(l1_altitude_error, 3)}-L1_VSD={round(l1_vertical_speed_dif, 3)}.txt"
     data = [altitude_list, roc_list, target_roc_list, altitude_error_list,
             vertical_speed_dif_list, elevator_deflection_list]
-    np.savetxt(filename, np.column_stack(data), fmt="%.8f", delimiter=",", header="Altitude, VerticalSpeed, TargetVerticalSpeed, AltitudeError, VS_difference, Elevator")
+    np.savetxt(filename, np.column_stack(data), fmt="%.8f", delimiter=",",
+               header="Altitude, VerticalSpeed, TargetVerticalSpeed, AltitudeError, VS_difference, Elevator")
 
     # DEBUG INFO
     print(f"L1 | altitude_error: {l1_altitude_error}")
@@ -171,7 +173,7 @@ if __name__ == "__main__":
         Real(-5, -1, name='elevator_kd'),
     ]
 
-    #maneuvering(-0.9807275087798706, -1.4815004639651028, -2.601725489049133, -3.0118800777735473, -3.816516655665921, -3.2859154875561467)
+    # maneuvering(-0.9807275087798706, -1.4815004639651028, -2.601725489049133, -3.0118800777735473, -3.816516655665921, -3.2859154875561467)
 
     result = gp_minimize(objective, space, n_calls=150, n_random_starts=1)
     print(f'Best parameters: {result.x}')

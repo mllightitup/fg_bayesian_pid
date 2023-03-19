@@ -173,7 +173,7 @@ if __name__ == "__main__":
         Real(-5, -1, name='elevator_kd'),
     ]
 
-    # maneuvering(-0.9807275087798706, -1.4815004639651028, -2.601725489049133, -3.0118800777735473, -3.816516655665921, -3.2859154875561467)
+    # maneuvering()
 
     result = gp_minimize(objective, space, n_calls=150, n_random_starts=1)
     print(f'Best parameters: {result.x}')

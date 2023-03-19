@@ -1,5 +1,5 @@
 # Project Description "fg_bayesian_pid"
-The "fg_bayesian_pid" project is a simulation-based implementation of the Bayesian algorithm for optimizing the coefficients of the PID controller for control systems. The project uses the ```FlightGear simulator``` and Python libraries ```scikit-optimize``` and ```flightgear-python``` for optimization and simulator interaction, respectively.
+The ***"fg_bayesian_pid"*** project is a simulation-based implementation of the Bayesian algorithm for optimizing the coefficients of the PID controller for control systems. The project uses the ```FlightGear simulator``` and Python libraries ```scikit-optimize``` and ```flightgear-python``` for optimization and simulator interaction, respectively.
 
 ## Project Files
 + ### ```bayesian_pid_optimization_fdm.py```

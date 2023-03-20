@@ -15,6 +15,8 @@ child_elevator_state = 0.0
 child_rudder_state = 0.0
 
 n = 1
+b = 0
+b_iter = 0
 
 
 def ctrls_callback(ctrls_data, event_pipe):
@@ -36,32 +38,41 @@ def ctrls_callback(ctrls_data, event_pipe):
 
 
 def fdm_callback(fdm_data, event_pipe):
+    global b
     if event_pipe.child_poll():
-        child_start_new, = event_pipe.child_recv()
+        print("Мне пришли данные")
+        child_start_new, child_start_altitude_ft = event_pipe.child_recv()
         if child_start_new:
-            start_alitude_ft = random.randint(2000, 4000) * 0.3048
-            fdm_data.alt_m = start_alitude_ft
+            print("Я в ИФЕ")
+            fdm_data.vcas = 120
+            fdm_data.alt_m = child_start_altitude_ft
             fdm_data.phi_rad = 0
             fdm_data.climb_rate_ft_per_s = 0
             fdm_data.theta_rad = 0
-            fdm_data.vcas = 120
+            b = 1
             child_start_new = False
             return fdm_data
+    if b == 1:
+        b = 10000
     roll_deg = math.degrees(fdm_data.phi_rad)
     climb_rate_ft_per_s = fdm_data.climb_rate_ft_per_s
     alt_m = fdm_data.alt_m
     alpha_rad = math.degrees(fdm_data.alpha_rad)
     psi_rad = math.degrees(fdm_data.psi_rad)
     elevator = fdm_data.elevator
-    event_pipe.child_send((roll_deg, climb_rate_ft_per_s, alt_m, alpha_rad, psi_rad, elevator))
+    event_pipe.child_send((roll_deg, climb_rate_ft_per_s, alt_m, alpha_rad, psi_rad, elevator, b))
 
 
 def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_kp, elevator_ki, elevator_kd) -> ndarray:
     global n
-
+    global b_iter
+    crash_coefficient = 1
     start_new = True
-    fdm_event_pipe.parent_send((start_new,))
-    time.sleep(1)
+    start_alitude_ft = random.randint(2000, 4000)
+    print(f"{start_alitude_ft} высота в футах")
+    start_alitude_m = start_alitude_ft * 0.3048
+    print("ОТПРАВЛЯЮ В FDM")
+    fdm_event_pipe.parent_send((start_new, start_alitude_m))
     # Создаем экземпляры классов
     aircraft_controller = AircraftController(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_kp,
                                              elevator_ki, elevator_kd)
@@ -83,10 +94,9 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     head_Kp = 0.01
     roll_deg_setpoint = 0
     head_deg_setpoint = 180
+    _, last_vertical_speed, altitude_m, _, _, _, first_b = fdm_event_pipe.parent_recv()
 
-    _, last_vertical_speed, start_altitude_m, _, _, _ = fdm_event_pipe.parent_recv()
-    start_altitude_ft = start_altitude_m * 3.28084
-    print(f"Start: {start_altitude_ft} - Target: {target_altitude}")
+    print(f"Start: {start_alitude_ft} - Target: {target_altitude}")
     print(f"roc_kp: {roc_kp} roc_ki: {roc_ki} roc_kd: {roc_kd}\n"
           f"pitch_kp: {pitch_kp} pitch_ki: {pitch_ki} pitch_kd: {pitch_kd}\n"
           f"elevator_kp: {elevator_kp} elevator_ki: {elevator_ki} elevator_kd: {elevator_kd}")
@@ -94,50 +104,58 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     while time.time() - start_time < 120:
         if fdm_event_pipe.parent_poll():
             # RECEIVING DATA FROM fdm_callback
-            parent_roll_deg, parent_climb_rate_ft_per_s, parent_alt_m, parent_alpha_rad, parent_psi_rad, parent_elevator = fdm_event_pipe.parent_recv()
-            parent_alt_ft = parent_alt_m * 3.28084
+            parent_roll_deg, parent_climb_rate_ft_per_s, parent_alt_m, parent_alpha_rad, parent_psi_rad, parent_elevator, parent_b = fdm_event_pipe.parent_recv()
+            if parent_b == 10000:
+                b_iter += 1
+            if b_iter > 1:
+                parent_alt_ft = parent_alt_m * 3.28084
 
-            # AILERON | RUDDER P-CONTROLLER
-            roll_error = roll_deg_setpoint - parent_roll_deg
-            head_error = head_deg_setpoint - parent_psi_rad
-            parent_aileron_req = roll_error * roll_Kp
-            parent_rudder_req = max(min(head_error * head_Kp, 0.3), -0.3)
+                # AILERON | RUDDER P-CONTROLLER
+                roll_error = roll_deg_setpoint - parent_roll_deg
+                head_error = head_deg_setpoint - parent_psi_rad
+                parent_aileron_req = roll_error * roll_Kp
+                parent_rudder_req = max(min(head_error * head_Kp, 0.3), -0.3)
+                # AIRCRAFT CONTROLLER
+                parent_elevator_req = aircraft_controller.update(target_altitude, parent_alt_ft,
+                                                                 parent_climb_rate_ft_per_s,
+                                                                 parent_elevator)
 
-            # AIRCRAFT CONTROLLER
-            parent_elevator_req = aircraft_controller.update(target_altitude, parent_alt_ft, parent_climb_rate_ft_per_s,
-                                                             parent_elevator)
+                # SENDING SIGNALS TO ctrls_callback
+                ctrls_event_pipe.parent_send((parent_aileron_req, parent_rudder_req, parent_elevator_req))
 
-            # SENDING SIGNALS TO ctrls_callback
-            ctrls_event_pipe.parent_send((parent_aileron_req, parent_rudder_req, parent_elevator_req))
+                # DATA COLLECTION
+                altitude_list.append(parent_alt_ft)
+                roc_list.append(parent_climb_rate_ft_per_s)
+                elevator_deflection_list.append(parent_elevator_req)
+                target_roc_list.append(aircraft_controller.target_roc)
 
-            # DATA COLLECTION
-            altitude_list.append(parent_alt_ft)
-            roc_list.append(parent_climb_rate_ft_per_s)
-            elevator_deflection_list.append(parent_elevator_req)
-            target_roc_list.append(aircraft_controller.target_roc)
-            # METRICS COLLECTION
-            altitude_error = parent_alt_m - target_altitude
-            altitude_error_list.append(altitude_error)
+                # METRICS COLLECTION
+                altitude_error = parent_alt_m - target_altitude
+                altitude_error_list.append(altitude_error)
 
-            vertical_speed_dif = parent_climb_rate_ft_per_s - last_vertical_speed
-            vertical_speed_dif_list.append(vertical_speed_dif)
-            last_vertical_speed = parent_climb_rate_ft_per_s
-        if parent_alt_ft < 150:
-            break
+                vertical_speed_dif = parent_climb_rate_ft_per_s - last_vertical_speed
+                vertical_speed_dif_list.append(vertical_speed_dif)
+                last_vertical_speed = parent_climb_rate_ft_per_s
+
+                # CRASH PREVENT
+                if parent_alt_ft < 150:
+                    crash_coefficient = 1000
+                    break
 
     # METRICS CALCULATION
-    coefficient = max(20, abs(start_altitude_ft - target_altitude))
-    l1_altitude_error = np.sum(np.abs(np.array(altitude_error_list) / coefficient))
-    l1_vertical_speed_dif = np.sum(np.abs(np.array(vertical_speed_dif_list) / np.sqrt(coefficient)))
+    coefficient = max(20, abs(start_alitude_ft - target_altitude))
+    l1_altitude_error = np.sum(np.abs(np.array(altitude_error_list) / coefficient)) * crash_coefficient
+    l1_vertical_speed_dif = np.sum(np.abs(np.array(vertical_speed_dif_list) / np.sqrt(coefficient))) * crash_coefficient
 
     # SAVE LOGS
-    filename = f"data/{n}-Start={start_altitude_ft}-Target={target_altitude}-L1_AE={round(l1_altitude_error, 3)}-L1_VSD={round(l1_vertical_speed_dif, 3)}.txt"
+    filename = f"data/{n}-Start={start_alitude_ft}-Target={target_altitude}-L1_AE={round(l1_altitude_error, 3)}-L1_VSD={round(l1_vertical_speed_dif, 3)}.txt"
     data = [altitude_list, roc_list, target_roc_list, altitude_error_list,
             vertical_speed_dif_list, elevator_deflection_list]
     np.savetxt(filename, np.column_stack(data), fmt="%.8f", delimiter=",",
                header="Altitude, VerticalSpeed, TargetVerticalSpeed, AltitudeError, VS_difference, Elevator")
 
     # DEBUG INFO
+
     print(f"L1 | altitude_error: {l1_altitude_error}")
     print(f"L1 | vertical_speed_dif: {l1_vertical_speed_dif}\n")
     n += 1
@@ -174,7 +192,7 @@ if __name__ == "__main__":
     ]
 
     # maneuvering()
-
-    result = gp_minimize(objective, space, n_calls=150, n_random_starts=1)
+    time.sleep(2)
+    result = gp_minimize(objective, space, n_calls=150, n_random_starts=30)
     print(f'Best parameters: {result.x}')
     print(f'Best score: {result.fun}')

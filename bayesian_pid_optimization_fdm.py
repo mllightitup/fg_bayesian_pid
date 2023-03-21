@@ -40,10 +40,8 @@ def ctrls_callback(ctrls_data, event_pipe):
 def fdm_callback(fdm_data, event_pipe):
     global b
     if event_pipe.child_poll():
-        print("Мне пришли данные")
         child_start_new, child_start_altitude_ft = event_pipe.child_recv()
         if child_start_new:
-            print("Я в ИФЕ")
             fdm_data.vcas = 120
             fdm_data.alt_m = child_start_altitude_ft
             fdm_data.phi_rad = 0
@@ -57,21 +55,21 @@ def fdm_callback(fdm_data, event_pipe):
     roll_deg = math.degrees(fdm_data.phi_rad)
     climb_rate_ft_per_s = fdm_data.climb_rate_ft_per_s
     alt_m = fdm_data.alt_m
+    agl_m = fdm_data.agl_m
     alpha_rad = math.degrees(fdm_data.alpha_rad)
     psi_rad = math.degrees(fdm_data.psi_rad)
     elevator = fdm_data.elevator
-    event_pipe.child_send((roll_deg, climb_rate_ft_per_s, alt_m, alpha_rad, psi_rad, elevator, b))
+    event_pipe.child_send((roll_deg, climb_rate_ft_per_s, alt_m, alpha_rad, psi_rad, elevator, agl_m, b))
 
 
 def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_kp, elevator_ki, elevator_kd) -> ndarray:
     global n
     global b_iter
+    b_iter = 0
     crash_coefficient = 1
     start_new = True
     start_alitude_ft = random.randint(2000, 4000)
-    print(f"{start_alitude_ft} высота в футах")
     start_alitude_m = start_alitude_ft * 0.3048
-    print("ОТПРАВЛЯЮ В FDM")
     fdm_event_pipe.parent_send((start_new, start_alitude_m))
     # Создаем экземпляры классов
     aircraft_controller = AircraftController(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_kp,
@@ -94,21 +92,21 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     head_Kp = 0.01
     roll_deg_setpoint = 0
     head_deg_setpoint = 180
-    _, last_vertical_speed, altitude_m, _, _, _, first_b = fdm_event_pipe.parent_recv()
+    _, last_vertical_speed, altitude_m, _, _, _, _, _ = fdm_event_pipe.parent_recv()
 
     print(f"Start: {start_alitude_ft} - Target: {target_altitude}")
     print(f"roc_kp: {roc_kp} roc_ki: {roc_ki} roc_kd: {roc_kd}\n"
           f"pitch_kp: {pitch_kp} pitch_ki: {pitch_ki} pitch_kd: {pitch_kd}\n"
           f"elevator_kp: {elevator_kp} elevator_ki: {elevator_ki} elevator_kd: {elevator_kd}")
 
-    while time.time() - start_time < 120:
+    while time.time() - start_time < 180:
         if fdm_event_pipe.parent_poll():
             # RECEIVING DATA FROM fdm_callback
-            parent_roll_deg, parent_climb_rate_ft_per_s, parent_alt_m, parent_alpha_rad, parent_psi_rad, parent_elevator, parent_b = fdm_event_pipe.parent_recv()
+            parent_roll_deg, parent_climb_rate_ft_per_s, parent_alt_m, parent_alpha_rad, parent_psi_rad, parent_elevator, parent_agl_m, parent_b = fdm_event_pipe.parent_recv()
+            parent_alt_ft = parent_alt_m * 3.28084
             if parent_b == 10000:
                 b_iter += 1
-            if b_iter > 1:
-                parent_alt_ft = parent_alt_m * 3.28084
+            if b_iter > 1 and abs(parent_alt_ft - start_alitude_ft) > 10:
 
                 # AILERON | RUDDER P-CONTROLLER
                 roll_error = roll_deg_setpoint - parent_roll_deg
@@ -127,7 +125,7 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
                 altitude_list.append(parent_alt_ft)
                 roc_list.append(parent_climb_rate_ft_per_s)
                 elevator_deflection_list.append(parent_elevator_req)
-                target_roc_list.append(aircraft_controller.target_roc)
+                #t_roc_list.append(aircraft_controller.target_roc)
 
                 # METRICS COLLECTION
                 altitude_error = parent_alt_m - target_altitude
@@ -138,8 +136,8 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
                 last_vertical_speed = parent_climb_rate_ft_per_s
 
                 # CRASH PREVENT
-                if parent_alt_ft < 150:
-                    crash_coefficient = 1000
+                if parent_agl_m * 3.28084 < 150:
+                    crash_coefficient = 100000
                     break
 
     # METRICS CALCULATION
@@ -149,7 +147,7 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
 
     # SAVE LOGS
     filename = f"data/{n}-Start={start_alitude_ft}-Target={target_altitude}-L1_AE={round(l1_altitude_error, 3)}-L1_VSD={round(l1_vertical_speed_dif, 3)}.txt"
-    data = [altitude_list, roc_list, target_roc_list, altitude_error_list,
+    data = [altitude_list, roc_list, altitude_error_list,
             vertical_speed_dif_list, elevator_deflection_list]
     np.savetxt(filename, np.column_stack(data), fmt="%.8f", delimiter=",",
                header="Altitude, VerticalSpeed, TargetVerticalSpeed, AltitudeError, VS_difference, Elevator")
@@ -191,8 +189,9 @@ if __name__ == "__main__":
         Real(-5, -1, name='elevator_kd'),
     ]
 
-    # maneuvering()
-    time.sleep(2)
+    #maneuvering(0, -1, -4, -4, -4, -4, -4, -4, -4)
     result = gp_minimize(objective, space, n_calls=150, n_random_starts=30)
     print(f'Best parameters: {result.x}')
     print(f'Best score: {result.fun}')
+
+# TODO ВЫЯСНИТЬ +- pitch, перепроверить - в иерархии

@@ -1,14 +1,5 @@
 from time import perf_counter
 import numpy as np
-from numpy import ndarray
-from flightgear_utils_telnet import FGUtils
-
-
-MAX_AIRCRAFT_DOWN_SPEED = -5
-MAX_AIRCRAFT_UP_SPEED = 5
-
-MIN_ELEVATOR_DEFLECTION = -0.02
-MAX_ELEVATOR_DEFLECTION = 0.5
 
 
 class PIDController:
@@ -30,63 +21,6 @@ class PIDController:
                 + derivative_error * self.kd
         )
 
-
-class AltitudeHoldController:
-    def __init__(self, altitude_kp: float, altitude_ki: float, altitude_kd: float, props_conn):
-        self.altitude_controller = PIDController(altitude_kp, altitude_ki, altitude_kd)
-        self.fg_utils = FGUtils(props_conn)
-
-    def update(self, target_altitude):
-        current_altitude = self.fg_utils.get_altitude()
-        altitude_error = current_altitude - target_altitude
-        altitude_control_signal = self.altitude_controller.update(altitude_error)
-        print(f"Current_A: {current_altitude} Target_A: {target_altitude} A_Error: {altitude_error} A_control_signal: {altitude_control_signal}")
-        return np.clip(altitude_control_signal, MAX_AIRCRAFT_DOWN_SPEED, MAX_AIRCRAFT_UP_SPEED)
-
-
-# class ClimbRateHoldController:
-#     def __init__(self, climb_rate_kp: float, climb_rate_ki: float, climb_rate_kd: float):
-#         self.climb_rate_controller = PIDController(climb_rate_kp, climb_rate_ki, climb_rate_kd)
-#
-#     def update(self, target_climb_rate: ndarray) -> ndarray:
-#         current_climb_rate = FGUtils.get_vertical_speed()
-#         climb_rate_error = current_climb_rate - target_climb_rate
-#         climb_rate_control_signal = self.climb_rate_controller.update(climb_rate_error)
-#         print(f"Current_CR: {round(current_climb_rate, 2)} Target_CR: {round(target_climb_rate, 2)} CR_Error: {round(climb_rate_error,2)} CR_control_signal: {round(climb_rate_control_signal,2)}")
-#         return np.clip(climb_rate_control_signal, MAX_PITCH_DOWN_ANGLE, MAX_PITCH_UP_ANGLE)
-#
-#
-# class PitchHoldController:
-#     def __init__(self, pitch_kp: float, pitch_ki: float, pitch_kd: float):
-#         self.pitch_controller = PIDController(pitch_kp, pitch_ki, pitch_kd)
-#
-#     def update(self, target_pitch: ndarray) -> ndarray:
-#         current_pitch = FGUtils.get_pitch()
-#         pitch_error = current_pitch - target_pitch
-#         pitch_control_signal = self.pitch_controller.update(pitch_error)
-#         print(f"Current_P: {round(current_pitch, 2)} Target_P: {round(target_pitch, 2)} P_Error: {round(pitch_error, 2)} P_control_signal: {round(pitch_control_signal, 2)}\n")
-#         return np.clip(pitch_control_signal, MIN_ELEVATOR_DEFLECTION, MAX_ELEVATOR_DEFLECTION)
-
-
-class ElevatorController:
-    def __init__(self, pitch_kp: float, pitch_ki: float, pitch_kd: float, props_conn):
-        self.elevator_controller = PIDController(pitch_kp, pitch_ki, pitch_kd)
-        self.fg_utils = FGUtils(props_conn)
-
-    def update(self, target_vs: ndarray) -> ndarray:
-        current_vs = self.fg_utils.get_vertical_speed()
-        vs_error = current_vs - target_vs
-        elevator_control_signal = self.elevator_controller.update(vs_error)
-        print(f"Current_VS: {round(current_vs, 2)} Target_VS: {round(target_vs, 2)} VS_Error: {round(vs_error, 2)} Elevator_control_signal: {elevator_control_signal}\n")
-        return np.clip(elevator_control_signal, MIN_ELEVATOR_DEFLECTION, MAX_ELEVATOR_DEFLECTION)
-
-
-
-
-
-
-
-# V2
 
 MAX_AIRCRAFT_ROC = 5
 

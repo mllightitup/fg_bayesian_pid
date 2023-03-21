@@ -12,6 +12,7 @@ from skopt.space import Real
 
 n = 1
 
+
 def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_kp, elevator_ki, elevator_kd) -> ndarray:
     global n
     # Создаем экземпляры классов
@@ -23,10 +24,10 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     target_altitude = random.randint(2000, 4000)
     FGUtils.set_vertical_speed(0)
     FGUtils.set_ground_speed(110)
-    FGUtils.set_roll_model(0)
-    FGUtils.set_pitch_model(0)
+    FGUtils.set_roll(0)
+    FGUtils.set_pitch(0)
     FGUtils.set_heading_model(180)
-    FGUtils.set_throttle(100)
+    FGUtils.set_throttle(1)
 
     last_roc = FGUtils.get_vertical_speed()
     crash_coefficient = 1
@@ -51,29 +52,27 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     start_time = time.time()
     while time.time() - start_time < 180:
 
-
         # AILERON | RUDDER P-CONTROLLER
         roll_error = roll_deg_setpoint - FGUtils.get_roll_deg()
         head_error = head_deg_setpoint - FGUtils.get_heading()
         aileron = roll_error * roll_Kp
         rudder = max(min(head_error * head_Kp, 0.3), -0.3)
-        FGUtils.set_rudder(aileron)
-        FGUtils.set_aileron(rudder)
+        FGUtils.set_rudder(rudder)
+        FGUtils.set_aileron(aileron)
 
         # ALTITUDE CONTROLLER
         alt_ft = FGUtils.get_altitude_above_sea()
         climb_rate_ft_per_s = FGUtils.get_vertical_speed()
         current_elevator = FGUtils.get_elevator()
-        elevator_signal = aircraft_controller.update(target_altitude, alt_ft,
-                                                     climb_rate_ft_per_s,
-                                                     current_elevator)
+        elevator_signal = aircraft_controller.update(target_altitude, alt_ft, climb_rate_ft_per_s, current_elevator)
+        FGUtils.set_elevator(elevator_signal)
 
         # DATA COLLECTION
         altitude_list.append(alt_ft)
         roc_list.append(climb_rate_ft_per_s)
         elevator_deflection_list.append(elevator_signal)
 
-        #target_roc_list.append(-target_climb_rate) #FIXME
+        # target_roc_list.append(-target_climb_rate) #FIXME
 
         # METRICS
         altitude_error = alt_ft - target_altitude
@@ -128,7 +127,7 @@ if __name__ == "__main__":
         Real(-5, -1, name='elevator_kd'),
     ]
 
-    #maneuvering()
+    # maneuvering()
 
     result = gp_minimize(objective, space, n_calls=150, n_random_starts=30)
     print(f'Best parameters: {result.x}')

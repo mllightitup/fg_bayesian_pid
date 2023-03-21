@@ -43,6 +43,7 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     roc_list = []
     elevator_deflection_list = []
     target_roc_list = []
+    tick_time_list = []
 
     print(f"Start: {start_altitude} - Target: {target_altitude}")
     print(f"roc_kp: {roc_kp} roc_ki: {roc_ki} roc_kd: {roc_kd}\n"
@@ -71,8 +72,8 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
         altitude_list.append(alt_ft)
         roc_list.append(climb_rate_ft_per_s)
         elevator_deflection_list.append(elevator_signal)
-
-        # target_roc_list.append(-target_climb_rate) #FIXME
+        target_roc_list.append(aircraft_controller.target_roc) #FIXME
+        tick_time_list.append(aircraft_controller.last_time)
 
         # METRICS
         altitude_error = alt_ft - target_altitude
@@ -93,10 +94,10 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
 
     # SAVE LOGS
     filename = f"data/{n}-Start={start_altitude}-Target={target_altitude}-L1_AE={round(l1_altitude_error, 3)}-L1_VSD={round(l1_vertical_speed_dif, 3)}.txt"
-    data = [altitude_list, roc_list, altitude_error_list,
+    data = [tick_time_list, altitude_list, roc_list, target_roc_list, altitude_error_list,
             roc_dif_list, elevator_deflection_list]
     np.savetxt(filename, np.column_stack(data), fmt="%.8f", delimiter=",",
-               header="Altitude, VerticalSpeed, AltitudeError, VS_difference, Elevator")
+               header="Tick_Time, Altitude, Current_ROC, Target_ROC, AltitudeError, ROC_Difference, Elevator_Deflection")
 
     # DEBUG INFO
     print(f"L1 | altitude_error: {l1_altitude_error}")

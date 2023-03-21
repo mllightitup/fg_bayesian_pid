@@ -37,6 +37,7 @@ class AircraftController:
                  roc_kp: float, roc_ki: float, roc_kd: float,
                  pitch_kp: float, pitch_ki: float, pitch_kd: float,
                  elevator_kp: float, elevator_ki: float, elevator_kd: float):
+        self.target_roc = None
         self.roc_controller = PIDController(roc_kp, roc_ki, roc_kd)
         self.pitch_controller = PIDController(pitch_kp, pitch_ki, pitch_kd)
         self.elevator_controller = PIDController(elevator_kp, elevator_ki, elevator_kd)
@@ -48,8 +49,8 @@ class AircraftController:
         self.last_time = current_time
 
         altitude_error = current_altitude - target_altitude
-        target_roc = -self.roc_controller.update(altitude_error, dt)
-        target_roc_clipped = np.clip(target_roc, -MAX_AIRCRAFT_ROC, MAX_AIRCRAFT_ROC)
+        self.target_roc = -self.roc_controller.update(altitude_error, dt)
+        target_roc_clipped = np.clip(self.target_roc, -MAX_AIRCRAFT_ROC, MAX_AIRCRAFT_ROC)
 
         roc_error = current_roc - target_roc_clipped
         target_pitch_change_delta = -self.pitch_controller.update(roc_error, dt)
@@ -63,7 +64,7 @@ class AircraftController:
         elevator_deflection_full_clipped = np.clip(elevator_deflection_full, MIN_AIRCRAFT_ELEVATOR_DEFLECTION,
                                                    MAX_AIRCRAFT_ELEVATOR_DEFLECTION)
 
-        # print(f"altitude: {current_altitude} t_altitude: {target_altitude} t_roc: {target_roc}\n"
+        # print(f"altitude: {current_altitude} t_altitude: {target_altitude} t_roc: {self.target_roc}\n"
         #       f"roc: {current_roc} t_roc: {target_roc_clipped} pitch_delta: {target_pitch_change_delta}\n"
         #       f"e_delta: {elevator_deflection_delta} e_delta_clipped: {elevator_deflection_delta_clipped}\n"
         #       f"e_full: {elevator_deflection_full} e_current: {current_elevator_deflection}\n")

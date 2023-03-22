@@ -1,6 +1,7 @@
 import datetime
 import random
 import time
+import pandas as pd
 
 from flightgear_python.fg_if import PropsConnection
 from numpy import ndarray
@@ -22,12 +23,15 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     start_altitude = random.randint(2000, 4000)
     FGUtils.set_altitude(start_altitude)
     target_altitude = random.randint(2000, 4000)
+
     FGUtils.set_vertical_speed(0)
-    FGUtils.set_ground_speed(110)
-    FGUtils.set_roll(0)
+    FGUtils.set_ground_speed(100)
     FGUtils.set_pitch(0)
     FGUtils.set_heading_model(180)
     FGUtils.set_throttle(1)
+    FGUtils.set_rudder(0)
+    FGUtils.set_elevator(0)
+    FGUtils.set_aileron(0)
 
     last_roc = FGUtils.get_vertical_speed()
     crash_coefficient = 1
@@ -37,13 +41,25 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     head_Kp = 0.01
 
     # DATA COLLECTION INIT
-    altitude_error_list = []
-    roc_dif_list = []
-    altitude_list = []
-    roc_list = []
-    elevator_deflection_list = []
-    target_roc_list = []
+    dt_list = []
     tick_time_list = []
+
+    altitude_list = []
+    altitude_error_list = []
+
+    roc_list = []
+    roc_error_list = []
+    roc_dif_list = []
+    target_roc_list = []
+    target_roc_clipped_list = []
+
+    target_pitch_change_delta_list = []
+    target_pitch_change_delta_clipped_list = []
+
+    elevator_deflection_delta_list = []
+    elevator_deflection_delta_clipped_list = []
+    elevator_deflection_full_list = []
+    elevator_deflection_full_clipped_list = []
 
     print(f"Start: {start_altitude} - Target: {target_altitude}")
     print(f"roc_kp: {roc_kp} roc_ki: {roc_ki} roc_kd: {roc_kd}\n"
@@ -57,7 +73,7 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
         roll_error = roll_deg_setpoint - FGUtils.get_roll_deg()
         head_error = head_deg_setpoint - FGUtils.get_heading()
         aileron = roll_error * roll_Kp
-        rudder = max(min(head_error * head_Kp, 0.3), -0.3)
+        rudder = max(min(head_error * head_Kp, 0.2), -0.2)
         FGUtils.set_rudder(rudder)
         FGUtils.set_aileron(aileron)
 
@@ -65,26 +81,41 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
         alt_ft = FGUtils.get_altitude_above_sea()
         climb_rate_ft_per_s = FGUtils.get_vertical_speed()
         current_elevator = FGUtils.get_elevator()
-        elevator_signal = aircraft_controller.update(target_altitude, alt_ft, climb_rate_ft_per_s, current_elevator)
+        current_pitch = FGUtils.get_pitch()
+        elevator_signal = aircraft_controller.update(target_altitude, alt_ft, climb_rate_ft_per_s, current_pitch,
+                                                     current_elevator)
         FGUtils.set_elevator(elevator_signal)
 
         # DATA COLLECTION
-        altitude_list.append(alt_ft)
-        roc_list.append(climb_rate_ft_per_s)
-        elevator_deflection_list.append(elevator_signal)
-        target_roc_list.append(aircraft_controller.target_roc) #FIXME
+        dt_list.append(aircraft_controller.dt)
         tick_time_list.append(aircraft_controller.last_time)
 
+        altitude_list.append(alt_ft)
+        #  altitude_error in metrics
+
+        roc_list.append(climb_rate_ft_per_s)
+        roc_error_list.append(aircraft_controller.roc_error)
+        target_roc_list.append(aircraft_controller.target_roc)
+        target_roc_clipped_list.append(aircraft_controller.target_roc_clipped)
+        #  roc_diff in metrics
+
+        target_pitch_change_delta_list.append(aircraft_controller.target_pitch_change_delta)
+        target_pitch_change_delta_clipped_list.append(aircraft_controller.target_pitch_change_delta_clipped)
+
+        elevator_deflection_delta_list.append(aircraft_controller.elevator_deflection_delta)
+        elevator_deflection_delta_clipped_list.append(aircraft_controller.elevator_deflection_delta_clipped)
+        elevator_deflection_full_list.append(aircraft_controller.elevator_deflection_full)
+        elevator_deflection_full_clipped_list.append(elevator_signal)
+
         # METRICS
-        altitude_error = alt_ft - target_altitude
-        altitude_error_list.append(altitude_error)
+        altitude_error_list.append(aircraft_controller.altitude_error)
 
         roc_dif = climb_rate_ft_per_s - last_roc
         roc_dif_list.append(roc_dif)
         last_roc = climb_rate_ft_per_s
 
         # CRASH PREVENT
-        if FGUtils.get_altitude_above_ground() < 150:
+        if FGUtils.get_altitude_above_ground() < 200:
             crash_coefficient = 100000
             break
     # METRICS CALCULATION
@@ -93,15 +124,59 @@ def maneuvering(roc_kp, roc_ki, roc_kd, pitch_kp, pitch_ki, pitch_kd, elevator_k
     l1_vertical_speed_dif = np.sum(np.abs(np.array(roc_dif_list) / np.sqrt(coefficient))) * crash_coefficient
 
     # SAVE LOGS
-    filename = f"data/{n}-Start={start_altitude}-Target={target_altitude}-L1_AE={round(l1_altitude_error, 3)}-L1_VSD={round(l1_vertical_speed_dif, 3)}.txt"
-    data = [tick_time_list, altitude_list, roc_list, target_roc_list, altitude_error_list,
-            roc_dif_list, elevator_deflection_list]
+    filename = f"data/{n}_Start={start_altitude}_Target={target_altitude}_L1_A-E={round(l1_altitude_error, 3)}_L1-ROC-D={round(l1_vertical_speed_dif, 3)}.txt"
+    data = [
+        dt_list,
+        tick_time_list,
+        altitude_list,
+        altitude_error_list,
+        roc_list,
+        roc_error_list,
+        target_roc_list,
+        target_roc_clipped_list,
+        roc_dif_list,
+        target_pitch_change_delta_list,
+        target_pitch_change_delta_clipped_list,
+        elevator_deflection_delta_list,
+        elevator_deflection_delta_clipped_list,
+        elevator_deflection_full_list,
+        elevator_deflection_full_clipped_list,
+    ]
     np.savetxt(filename, np.column_stack(data), fmt="%.8f", delimiter=",",
-               header="Tick_Time, Altitude, Current_ROC, Target_ROC, AltitudeError, ROC_Difference, Elevator_Deflection")
+               header="dt,tick_time,altitude,altitude_error,roc,roc_error,target_roc,"
+                      "target_roc_clipped,roc_dif,target_pitch_change_delta,"
+                      "target_pitch_change_delta_clipped,elevator_deflection_delta,"
+                      "elevator_deflection_delta_clipped,elevator_deflection_full,"
+                      "elevator_deflection_full_clipped")
 
+    data = pd.DataFrame({
+        "dt": dt_list,
+        'Tick Time': tick_time_list,
+        'Altitude': altitude_list,
+        'Altitude Error': altitude_error_list,
+        'ROC': roc_list,
+        'ROC Error': roc_error_list,
+        'Target ROC': target_roc_list,
+        'Target ROC Clipped': target_roc_clipped_list,
+        'ROC Difference': roc_dif_list,
+        'Target Pitch Change Delta': target_pitch_change_delta_list,
+        'Target Pitch Change Delta Clipped': target_pitch_change_delta_clipped_list,
+        'Elevator Deflection Delta': elevator_deflection_delta_list,
+        'Elevator Deflection Delta Clipped': elevator_deflection_delta_clipped_list,
+        'Elevator Deflection Full': elevator_deflection_full_list,
+        'Elevator Deflection Full Clipped': elevator_deflection_full_clipped_list
+    })
+
+    # создаем таблицу из DataFrame
+    html_table = data.to_html(index=False)
+
+    # сохраняем таблицу в файл
+    with open(f'data/{n}_Start={start_altitude}_Target={target_altitude}_L1_A-E={round(l1_altitude_error, 3)}_L1-ROC-D={round(l1_vertical_speed_dif, 3)}.html', 'w') as f:
+        f.write(html_table)
     # DEBUG INFO
-    print(f"L1 | altitude_error: {l1_altitude_error}")
-    print(f"L1 | vertical_speed_dif: {l1_vertical_speed_dif}\n")
+    print(f"L1 | altitude_error: {l1_altitude_error}\n"
+          f"L1 | vertical_speed_dif: {l1_vertical_speed_dif}\n"
+          f"L1_summ = {l1_altitude_error + l1_vertical_speed_dif}\n")
     n += 1
     return l1_altitude_error + l1_vertical_speed_dif
 

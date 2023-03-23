@@ -5,12 +5,14 @@ import numpy as np
 class PIDController:
     def __init__(self, kp: float, ki: float, kd: float):
         self.kp = 10 ** kp
-        self.ki = 10 ** ki
-        self.kd = 10 ** kd
+        self.ki = 10 ** ki * self.kp
+        self.kd = 10 ** kd * self.kp * 0
         self.last_error = None
         self.integral_error = 0
 
     def update(self, error: float, dt: float) -> float:
+
+
         self.integral_error += error * dt
         derivative_error = (error - self.last_error) / dt if self.last_error is not None else 0
         self.last_error = error
@@ -24,11 +26,11 @@ class PIDController:
 
 MAX_AIRCRAFT_ROC = 5
 
-MIN_AIRCRAFT_PITCH = -2
-MAX_AIRCRAFT_PITCH = 2
+MIN_AIRCRAFT_PITCH = -5
+MAX_AIRCRAFT_PITCH = 5
 
-MIN_AIRCRAFT_ELEVATOR_DEFLECTION = -0.1
-MAX_AIRCRAFT_ELEVATOR_DEFLECTION = 0.3
+MIN_AIRCRAFT_ELEVATOR_DEFLECTION = -0.005
+MAX_AIRCRAFT_ELEVATOR_DEFLECTION = 0.22
 AIRCRAFT_ELEVATOR_PERIOD = 2
 
 
@@ -61,6 +63,7 @@ class AircraftController:
         self.last_time = current_time
 
         self.altitude_error = current_altitude - target_altitude
+
         self.target_roc = -self.roc_controller.update(self.altitude_error, self.dt)
         self.target_roc_clipped = np.clip(self.target_roc, -MAX_AIRCRAFT_ROC, MAX_AIRCRAFT_ROC)
 
@@ -69,18 +72,20 @@ class AircraftController:
         # self.target_pitch_change_delta_clipped = np.clip(self.target_pitch_change_delta, MIN_AIRCRAFT_PITCH, MAX_AIRCRAFT_PITCH)
 
         if self.target_pitch_change_delta > 0:
-            self.target_pitch_change_delta_clipped = self.target_pitch_change_delta * (MAX_AIRCRAFT_PITCH - current_pitch) / (
-                    MAX_AIRCRAFT_PITCH - MIN_AIRCRAFT_PITCH)
+            self.target_pitch_change_delta_clipped = self.target_pitch_change_delta * (MAX_AIRCRAFT_PITCH - current_pitch) / 10
 
         if self.target_pitch_change_delta < 0:
-            self.target_pitch_change_delta_clipped = self.target_pitch_change_delta * (MIN_AIRCRAFT_PITCH - current_pitch) / (
-                    MIN_AIRCRAFT_PITCH - MAX_AIRCRAFT_PITCH)
+            self.target_pitch_change_delta_clipped = self.target_pitch_change_delta * (MIN_AIRCRAFT_PITCH - current_pitch) / -10
 
-        servo_simulation = (2 / AIRCRAFT_ELEVATOR_PERIOD) * self.dt
+        #print(current_altitude, self.target_pitch_change_delta, self.target_pitch_change_delta_clipped, current_pitch)
+        #servo_simulation = (2 / AIRCRAFT_ELEVATOR_PERIOD) * self.dt
         self.elevator_deflection_delta = -self.elevator_controller.update(self.target_pitch_change_delta, self.dt)
+        #print(current_altitude, current_roc, current_pitch, self.elevator_deflection_delta)
         # self.elevator_deflection_delta = -self.elevator_controller.update(self.target_pitch_change_delta_clipped, self.dt)
-        self.elevator_deflection_delta_clipped = np.clip(self.elevator_deflection_delta, -servo_simulation,
-                                                         servo_simulation)
+        servo_simulation = 1
+        self.elevator_deflection_delta_clipped = np.clip(self.elevator_deflection_delta, -servo_simulation, servo_simulation)
+
+
 
         self.elevator_deflection_full = self.elevator_deflection_delta_clipped + current_elevator_deflection
         self.elevator_deflection_full_clipped = np.clip(self.elevator_deflection_full, MIN_AIRCRAFT_ELEVATOR_DEFLECTION,

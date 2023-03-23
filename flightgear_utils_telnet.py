@@ -1,6 +1,10 @@
 class FGUtils:
     def __init__(self, props_conn):
         self.props_conn = props_conn
+        self.roll_deg_set_point = 0
+        self.head_deg_set_point = 180
+        self.roll_Kp = 0.01
+        self.head_Kp = 0.01
 
     def set_aileron(self, value):
         self.props_conn.set_prop('/controls/flight/aileron', value)
@@ -67,6 +71,14 @@ class FGUtils:
         roll_deg = self.get_roll_deg()
         aileron = -j * roll_deg
         self.set_aileron(max(-1, min(aileron, 1)))
+
+    def aileron_rudder_p_controller(self):
+        roll_error = self.roll_deg_set_point - self.get_roll_deg()
+        head_error = self.head_deg_set_point - self.get_heading()
+        aileron = roll_error * self.roll_Kp
+        rudder = max(min(head_error * self.head_Kp, 0.2), -0.2)
+        self.set_rudder(rudder)
+        self.set_aileron(aileron)
 
     # def plot_create(self, n, dt, list1, list2, list3, list4):
     #     if n % 255 == 0:

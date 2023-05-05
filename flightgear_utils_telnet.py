@@ -63,6 +63,9 @@ class FGUtils:
     def get_vertical_speed(self):
         return self.props_conn.get_prop("/velocities/vertical-speed-fps")
 
+    def get_ground_speed(self):
+        return self.props_conn.get_prop("/velocities/groundspeed-kt")
+
     def get_vertical_speed_jsbsim(self):
         return -self.props_conn.get_prop("/fdm/jsbsim/velocities/v-down-fps")
 

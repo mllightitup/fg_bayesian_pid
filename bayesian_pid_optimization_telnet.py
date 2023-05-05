@@ -57,7 +57,6 @@ def maneuvering(roc_kp, roc_ki, roc_kd, elevator_kp, elevator_ki, elevator_kd) -
         # ALTITUDE CONTROLLER
         alt_ft = FGUtils.get_altitude_above_sea()
         climb_rate_ft_per_s = FGUtils.get_vertical_speed()
-        print(FGUtils.get_vertical_speed_jsbsim(), climb_rate_ft_per_s, alt_ft)
         current_elevator = FGUtils.get_elevator()
         current_pitch = FGUtils.get_pitch()
         elevator_signal = aircraft_controller.update(target_altitude, alt_ft, climb_rate_ft_per_s, current_pitch,
@@ -68,7 +67,8 @@ def maneuvering(roc_kp, roc_ki, roc_kd, elevator_kp, elevator_ki, elevator_kd) -
         data[i, :] = [
             aircraft_controller.dt,
             aircraft_controller.last_time,
-            alt_ft, climb_rate_ft_per_s,
+            alt_ft,
+            climb_rate_ft_per_s,
             aircraft_controller.roc_error,
             aircraft_controller.target_roc,
             aircraft_controller.target_roc_clipped,
@@ -136,6 +136,6 @@ if __name__ == "__main__":
         [-1.484395677075241, -2, -2, -4.0, -0.574321841003455, 0.7317159572934067],
         [-1.2411696011182358, -2.6398858942439016, -3.0, -3.595137025655778, -1.3641227060853973, 0.6627174644738796],
     ]
-    result = gp_minimize(objective, space, n_calls=150, n_random_starts=0, x0=x0)
-    print(f'Best parameters: {result.x}')
-    print(f'Best score: {result.fun}')
+    #result = gp_minimize(objective, space, n_calls=150, n_random_starts=0, x0=x0)
+    #print(f'Best parameters: {result.x}')
+    #print(f'Best score: {result.fun}')
